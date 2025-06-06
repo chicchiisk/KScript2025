@@ -1,0 +1,1 @@
+./bin/Debug/net9.0/compiler test_script/$1
