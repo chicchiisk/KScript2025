@@ -59,6 +59,7 @@ public class Parser
             if (Match(TokenType.Import)) return ImportDeclaration();
             if (Match(TokenType.Export)) return ExportDeclaration();
             if (Match(TokenType.Struct)) return StructDeclaration();
+            if (Match(TokenType.Class)) return ClassDeclaration();
             
             if (IsPrimitiveType(Peek()))
             {
@@ -90,7 +91,7 @@ public class Parser
             Advance(); // consume 'as'
             Token moduleNameToken = Consume(TokenType.Identifier, "Expect module name after 'as'.");
             Consume(TokenType.From, "Expect 'from' after module name.");
-            Token pathToken = Consume(TokenType.Number, "Expect string path after 'from'.");
+            Token pathToken = Consume(TokenType.StringLiteral, "Expect string path after 'from'.");
             Consume(TokenType.Semicolon, "Expect ';' after import statement.");
             
             if (pathToken.Literal is not string path)
@@ -103,7 +104,7 @@ public class Parser
         // Handle existing 'import "path";' syntax
         else
         {
-            Token pathToken = Consume(TokenType.Number, "Expect string path after 'import'.");
+            Token pathToken = Consume(TokenType.StringLiteral, "Expect string path after 'import'.");
             Consume(TokenType.Semicolon, "Expect ';' after import path.");
             
             if (pathToken.Literal is not string path)
@@ -124,13 +125,17 @@ public class Parser
         {
             return StructDeclaration(true);
         }
+        else if (Match(TokenType.Class))
+        {
+            return ClassDeclaration(true);
+        }
         else if (IsPrimitiveType(Peek()) || Check(TokenType.Identifier))
         {
             return ParseTypeDeclaration(true);
         }
         else
         {
-            throw new Exception($"Only variables, functions, and structs can be exported at position {Peek().Position}");
+            throw new Exception($"Only variables, functions, structs, and classes can be exported at position {Peek().Position}");
         }
     }
 
@@ -164,6 +169,38 @@ public class Parser
         
         Consume(TokenType.RightBrace, "Expect '}' after struct body.");
         return new StructStmt(isExported, name, fields, methods, constructor);
+    }
+
+    /// <summary>
+    /// Parses class declarations
+    /// </summary>
+    private Stmt ClassDeclaration(bool isExported = false)
+    {
+        Token name = Consume(TokenType.Identifier, "Expect class name.");
+        Consume(TokenType.LeftBrace, "Expect '{' before class body.");
+        
+        List<VarStmt> fields = new();
+        List<FunctionStmt> methods = new();
+        FunctionStmt? constructor = null;
+        
+        while (!Check(TokenType.RightBrace) && !IsAtEnd())
+        {
+            if (IsPrimitiveType(Peek()))
+            {
+                ParseClassMember(name, fields, methods, ref constructor);
+            }
+            else if (Check(TokenType.Identifier))
+            {
+                ParseClassIdentifierMember(name, fields, methods, ref constructor);
+            }
+            else
+            {
+                throw new Exception($"Unexpected token in class body at position {Peek().Position}");
+            }
+        }
+        
+        Consume(TokenType.RightBrace, "Expect '}' after class body.");
+        return new ClassStmt(isExported, name, fields, methods, constructor);
     }
 
     /// <summary>
@@ -224,6 +261,7 @@ public class Parser
     private Stmt Statement()
     {
         if (Match(TokenType.For)) return ForStatement();
+        if (Match(TokenType.While)) return WhileStatement();
         if (Match(TokenType.If)) return IfStatement();
         if (Match(TokenType.Return)) return ReturnStatement();
         if (Match(TokenType.LeftBrace)) return BlockStatement();
@@ -260,6 +298,20 @@ public class Parser
         Stmt body = Statement();
 
         return new ForStmt(initializer, condition, increment, body);
+    }
+
+    /// <summary>
+    /// Parses while statements
+    /// </summary>
+    private Stmt WhileStatement()
+    {
+        Consume(TokenType.LeftParen, "Expect '(' after 'while'.");
+        Expr condition = Expression();
+        Consume(TokenType.RightParen, "Expect ')' after while condition.");
+        
+        Stmt body = Statement();
+        
+        return new WhileStmt(condition, body);
     }
 
     /// <summary>
@@ -509,6 +561,7 @@ public class Parser
         if (Match(TokenType.True)) return new LiteralExpr(true);
         if (Match(TokenType.False)) return new LiteralExpr(false);
         if (Match(TokenType.Number)) return new LiteralExpr(Previous().Literal);
+        if (Match(TokenType.StringLiteral)) return new LiteralExpr(Previous().Literal);
 
         if (Match(TokenType.New)) return ParseNewExpression();
         if (Match(TokenType.LeftBrace)) return ParseArrayLiteral();
@@ -527,7 +580,7 @@ public class Parser
     /// </summary>
     private static bool IsPrimitiveType(Token token)
     {
-        return token.Type is TokenType.Int or TokenType.Float or TokenType.Char or TokenType.Bool or TokenType.Void;
+        return token.Type is TokenType.Int or TokenType.Float or TokenType.Char or TokenType.Bool or TokenType.Void or TokenType.String;
     }
 
     /// <summary>
@@ -599,7 +652,7 @@ public class Parser
         {
             do
             {
-                if (!IsPrimitiveType(Peek()))
+                if (!IsPrimitiveType(Peek()) && !Check(TokenType.Identifier))
                 {
                     throw new Exception($"Expect parameter type at position {Peek().Position}");
                 }
@@ -761,7 +814,7 @@ public class Parser
         }
         else if (Check(TokenType.LeftParen))
         {
-            return ParseStructNewExpression(type);
+            return ParseObjectNewExpression(type);
         }
         else
         {
@@ -790,6 +843,15 @@ public class Parser
     /// <summary>
     /// Parses struct instantiation expressions
     /// </summary>
+    private Expr ParseObjectNewExpression(Token type)
+    {
+        Advance(); // consume '('
+        Consume(TokenType.RightParen, "Expect ')' after constructor arguments (parameterless constructor only).");
+        // For now, we'll use StructNewExpr for both structs and classes
+        // The interpreter will determine the actual type during execution
+        return new StructNewExpr(type);
+    }
+
     private Expr ParseStructNewExpression(Token type)
     {
         Advance(); // consume '('
@@ -945,6 +1007,112 @@ public class Parser
         else
         {
             throw new Exception($"Unexpected identifier '{firstIdentifier.Lexeme}' in struct body at position {firstIdentifier.Position}");
+        }
+    }
+
+    /// <summary>
+    /// Parses class members starting with primitive types
+    /// </summary>
+    private void ParseClassMember(Token className, List<VarStmt> fields, List<FunctionStmt> methods, ref FunctionStmt? constructor)
+    {
+        Token type = Advance();
+        int arrayDimensions = ParseArrayDimensions();
+        Token memberName = Consume(TokenType.Identifier, "Expect member name after type.");
+        
+        if (Check(TokenType.Semicolon))
+        {
+            // Field
+            Advance();
+            VarStmt field = new(false, type, memberName, arrayDimensions, null);
+            fields.Add(field);
+        }
+        else if (Check(TokenType.LeftParen))
+        {
+            // Method
+            Advance();
+            List<Parameter> parameters = ParseParameterList();
+            Consume(TokenType.RightParen, "Expect ')' after parameters.");
+            Consume(TokenType.LeftBrace, "Expect '{' before method body.");
+            List<Stmt> body = ParseBlockStatements();
+            Consume(TokenType.RightBrace, "Expect '}' after method body.");
+            
+            FunctionStmt method = new(false, type, memberName, 0, parameters, body);
+            
+            // Check if this is a constructor
+            if (memberName.Lexeme == className.Lexeme && type.Type == TokenType.Void)
+            {
+                if (constructor != null)
+                {
+                    throw new Exception($"Class '{className.Lexeme}' already has a constructor at position {memberName.Position}");
+                }
+                constructor = method;
+            }
+            else
+            {
+                methods.Add(method);
+            }
+        }
+        else
+        {
+            throw new Exception($"Expect ';' or '(' after member name at position {Peek().Position}");
+        }
+    }
+
+    /// <summary>
+    /// Parses class members when starting with identifier
+    /// </summary>
+    private void ParseClassIdentifierMember(Token className, List<VarStmt> fields, List<FunctionStmt> methods, ref FunctionStmt? constructor)
+    {
+        Token firstIdentifier = Advance();
+        
+        // Check if this is a constructor
+        if (firstIdentifier.Lexeme == className.Lexeme && Check(TokenType.LeftParen))
+        {
+            if (constructor != null)
+            {
+                throw new Exception($"Class '{className.Lexeme}' already has a constructor at position {firstIdentifier.Position}");
+            }
+            
+            Advance(); // consume '('
+            List<Parameter> parameters = ParseParameterList();
+            Consume(TokenType.RightParen, "Expect ')' after parameters.");
+            Consume(TokenType.LeftBrace, "Expect '{' before constructor body.");
+            List<Stmt> body = ParseBlockStatements();
+            Consume(TokenType.RightBrace, "Expect '}' after constructor body.");
+            
+            Token voidToken = new(TokenType.Void, "void", null, firstIdentifier.Position);
+            constructor = new FunctionStmt(false, voidToken, firstIdentifier, 0, parameters, body);
+        }
+        else if (Check(TokenType.Identifier))
+        {
+            // Field or method with user-defined type
+            Token memberName = Advance();
+            
+            if (Check(TokenType.LeftParen))
+            {
+                // Method with user-defined return type
+                Advance();
+                List<Parameter> parameters = ParseParameterList();
+                Consume(TokenType.RightParen, "Expect ')' after parameters.");
+                Consume(TokenType.LeftBrace, "Expect '{' before method body.");
+                List<Stmt> body = ParseBlockStatements();
+                Consume(TokenType.RightBrace, "Expect '}' after method body.");
+                
+                FunctionStmt method = new(false, firstIdentifier, memberName, 0, parameters, body);
+                methods.Add(method);
+            }
+            else
+            {
+                // Field with user-defined type
+                int arrayDimensions = ParseArrayDimensions();
+                Consume(TokenType.Semicolon, "Expect ';' after field declaration.");
+                VarStmt field = new(false, firstIdentifier, memberName, arrayDimensions, null);
+                fields.Add(field);
+            }
+        }
+        else
+        {
+            throw new Exception($"Unexpected identifier '{firstIdentifier.Lexeme}' in class body at position {firstIdentifier.Position}");
         }
     }
 

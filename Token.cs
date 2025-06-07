@@ -8,6 +8,7 @@ public enum TokenType
     // Literals and identifiers
     Number,
     Identifier,
+    StringLiteral,
     True,
     False,
     
@@ -50,6 +51,7 @@ public enum TokenType
     If,
     Else,
     For,
+    While,
     Return,
     
     // Type system keywords
@@ -58,10 +60,12 @@ public enum TokenType
     Char,
     Bool,
     Void,
+    String,
     
     // Object-oriented keywords
     New,
     Struct,
+    Class,
     
     // Module system keywords
     Import,

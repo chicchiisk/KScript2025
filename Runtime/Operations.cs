@@ -192,9 +192,31 @@ public static class MemberAccessOperations
             
             throw new Exception($"Struct '{structInstance.Definition.Name}' does not have field or method '{expr.MemberName.Lexeme}' at position {expr.MemberName.Position}");
         }
+        else if (target is ClassInstance classInstance)
+        {
+            // Class field access
+            try
+            {
+                return classInstance.GetField(expr.MemberName.Lexeme);
+            }
+            catch (Exception)
+            {
+                // Field not found, try method access
+            }
+            
+            // Class method access
+            Function? method = classInstance.GetMethod(expr.MemberName.Lexeme);
+            if (method != null)
+            {
+                // Return a bound method (method with 'this' context)
+                return new BoundClassMethod(classInstance, method);
+            }
+            
+            throw new Exception($"Class '{classInstance.Definition.Name}' does not have field or method '{expr.MemberName.Lexeme}' at position {expr.MemberName.Position}");
+        }
         else
         {
-            throw new Exception($"'{targetName}' is not a module or struct instance at position {expr.MemberName.Position}");
+            throw new Exception($"'{targetName}' is not a module, struct instance, or class instance at position {expr.MemberName.Position}");
         }
     }
 
@@ -230,9 +252,22 @@ public static class MemberAccessOperations
                 throw new Exception($"Struct '{structInstance.Definition.Name}' does not have field '{expr.Target.MemberName.Lexeme}' at position {expr.Target.MemberName.Position}");
             }
         }
+        else if (target is ClassInstance classInstance)
+        {
+            // Assign to class field
+            try
+            {
+                classInstance.SetField(expr.Target.MemberName.Lexeme, value);
+                return value;
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Class '{classInstance.Definition.Name}' field assignment error: {ex.Message} at position {expr.Target.MemberName.Position}");
+            }
+        }
         else
         {
-            throw new Exception($"Cannot assign to member of non-struct type at position {expr.Target.MemberName.Position}");
+            throw new Exception($"Cannot assign to member of non-struct/class type at position {expr.Target.MemberName.Position}");
         }
     }
 }
@@ -244,11 +279,17 @@ public static class StructOperations
 {
     public static object? CreateInstance(Interpreter interpreter, StructNewExpr expr)
     {
-        object? structDefObj = interpreter.globals.Get(new Token(TokenType.Identifier, expr.StructType.Lexeme, null, expr.StructType.Position));
+        object? typeDefObj = interpreter.globals.Get(new Token(TokenType.Identifier, expr.StructType.Lexeme, null, expr.StructType.Position));
         
-        if (structDefObj is not StructDefinition structDef)
+        // Check if it's a class first
+        if (typeDefObj is ClassDefinition classDef)
         {
-            throw new Exception($"'{expr.StructType.Lexeme}' is not a struct type at position {expr.StructType.Position}");
+            return CreateClassInstance(interpreter, classDef, expr.StructType);
+        }
+        
+        if (typeDefObj is not StructDefinition structDef)
+        {
+            throw new Exception($"'{expr.StructType.Lexeme}' is not a struct or class type at position {expr.StructType.Position}");
         }
         
         // Create new struct instance
@@ -286,6 +327,69 @@ public static class StructOperations
                     catch
                     {
                         // Field wasn't modified in constructor, keep original value
+                    }
+                }
+            }
+            catch (ReturnException)
+            {
+                // Constructors don't return values, so ignore return exceptions
+            }
+            finally
+            {
+                interpreter.environment = previous;
+            }
+        }
+        
+        return instance;
+    }
+
+    /// <summary>
+    /// Creates a new class instance on the heap
+    /// </summary>
+    private static object? CreateClassInstance(Interpreter interpreter, ClassDefinition classDef, Token classType)
+    {
+        // For simplicity, we'll allocate the heap space first, then create the instance
+        var tempObject = new ObjectBase(0);
+        int heapId = interpreter.HeapManager.Allocate(tempObject);
+        
+        // Create new class instance with the correct heap ID
+        ClassInstance instance = new ClassInstance(classDef, heapId);
+        
+        // Call constructor if it exists
+        if (classDef.Constructor != null)
+        {
+            // Create a new environment for the constructor
+            Environment previous = interpreter.environment;
+            interpreter.environment = new Environment(interpreter.globals);
+            
+            // Define 'this' to refer to the class instance
+            interpreter.environment.Define("this", instance);
+            
+            // Make class fields accessible directly in constructor
+            foreach (var field in instance.Fields)
+            {
+                interpreter.environment.Define(field.Key, field.Value);
+            }
+            
+            try
+            {
+                // Execute constructor body
+                foreach (Stmt stmt in classDef.Constructor.Declaration.Body)
+                {
+                    interpreter.Execute(stmt);
+                }
+                
+                // Copy modified field values back to the instance
+                foreach (var fieldName in classDef.DefaultFields.Keys)
+                {
+                    try
+                    {
+                        object? newValue = interpreter.environment.GetByName(fieldName);
+                        instance.SetField(fieldName, newValue);
+                    }
+                    catch (Exception)
+                    {
+                        // Field wasn't modified in constructor, keep default value
                     }
                 }
             }

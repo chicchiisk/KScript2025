@@ -19,11 +19,13 @@ public class Lexer
         ["char"] = TokenType.Char,
         ["bool"] = TokenType.Bool,
         ["void"] = TokenType.Void,
+        ["string"] = TokenType.String,
         
         // Control flow
         ["if"] = TokenType.If,
         ["else"] = TokenType.Else,
         ["for"] = TokenType.For,
+        ["while"] = TokenType.While,
         ["return"] = TokenType.Return,
         
         // Literals
@@ -33,6 +35,7 @@ public class Lexer
         // Object-oriented
         ["new"] = TokenType.New,
         ["struct"] = TokenType.Struct,
+        ["class"] = TokenType.Class,
         
         // Module system
         ["import"] = TokenType.Import,
@@ -88,7 +91,16 @@ public class Lexer
                 AddToken(tokens, TokenType.Multiply);
                 break;
             case '/':
-                AddToken(tokens, TokenType.Divide);
+                if (Match('/'))
+                {
+                    // Single-line comment - skip until end of line
+                    while (Peek() != '\n' && !IsAtEnd())
+                        Advance();
+                }
+                else
+                {
+                    AddToken(tokens, TokenType.Divide);
+                }
                 break;
             case '%':
                 AddToken(tokens, TokenType.Modulo);
@@ -308,7 +320,7 @@ public class Lexer
         // Consume the closing "
         Advance();
         
-        AddToken(tokens, TokenType.Number, value); // Use Number token type for string literals
+        AddToken(tokens, TokenType.StringLiteral, value);
     }
 
     /// <summary>

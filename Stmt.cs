@@ -22,12 +22,14 @@ public interface IStmtVisitor<T>
     // Control flow statements
     T VisitIfStmt(IfStmt stmt);
     T VisitForStmt(ForStmt stmt);
+    T VisitWhileStmt(WhileStmt stmt);
     T VisitReturnStmt(ReturnStmt stmt);
     
     // Declaration statements
     T VisitVarStmt(VarStmt stmt);
     T VisitFunctionStmt(FunctionStmt stmt);
     T VisitStructStmt(StructStmt stmt);
+    T VisitClassStmt(ClassStmt stmt);
     
     // Module system statements
     T VisitImportStmt(ImportStmt stmt);
@@ -120,6 +122,26 @@ public class ForStmt : Stmt
     public override T Accept<T>(IStmtVisitor<T> visitor)
     {
         return visitor.VisitForStmt(this);
+    }
+}
+
+/// <summary>
+/// Represents a while loop statement
+/// </summary>
+public class WhileStmt : Stmt
+{
+    public Expr Condition { get; }
+    public Stmt Body { get; }
+
+    public WhileStmt(Expr condition, Stmt body)
+    {
+        Condition = condition;
+        Body = body;
+    }
+
+    public override T Accept<T>(IStmtVisitor<T> visitor)
+    {
+        return visitor.VisitWhileStmt(this);
     }
 }
 
@@ -239,6 +261,32 @@ public class StructStmt : Stmt
     public override T Accept<T>(IStmtVisitor<T> visitor)
     {
         return visitor.VisitStructStmt(this);
+    }
+}
+
+/// <summary>
+/// Represents a class declaration with fields, methods, and optional constructor
+/// </summary>
+public class ClassStmt : Stmt
+{
+    public bool IsExported { get; }
+    public Token Name { get; }
+    public List<VarStmt> Fields { get; }
+    public List<FunctionStmt> Methods { get; }
+    public FunctionStmt? Constructor { get; }
+
+    public ClassStmt(bool isExported, Token name, List<VarStmt> fields, List<FunctionStmt> methods, FunctionStmt? constructor)
+    {
+        IsExported = isExported;
+        Name = name;
+        Fields = fields;
+        Methods = methods;
+        Constructor = constructor;
+    }
+
+    public override T Accept<T>(IStmtVisitor<T> visitor)
+    {
+        return visitor.VisitClassStmt(this);
     }
 }
 

@@ -49,6 +49,8 @@ public class Function : ICallable
                         TokenType.Float => interpreter.ConvertToFloat(arg, null),
                         TokenType.Char => interpreter.ConvertToChar(arg, null),
                         TokenType.Bool => interpreter.ConvertToBool(arg, null),
+                        TokenType.String => interpreter.ConvertToString(arg), // String reference type
+                        TokenType.Identifier => CreateParameterValue(arg), // Handle value vs reference semantics
                         _ => throw new Exception($"Unsupported parameter type: {param.Type.Type}")
                     };
                 }
@@ -68,6 +70,17 @@ public class Function : ICallable
             {
                 // Convert return value to function return type
                 object? result = returnValue.Value;
+                
+                // Special validation for void functions
+                if (Declaration.ReturnType.Type == TokenType.Void)
+                {
+                    if (result != null)
+                    {
+                        throw new Exception($"Void function '{Declaration.Name.Lexeme}' cannot return a value");
+                    }
+                    return VoidResult.Instance;
+                }
+                
                 if (Declaration.ReturnArrayDimensions == 0 && result != null)
                 {
                     result = Declaration.ReturnType.Type switch
@@ -76,7 +89,7 @@ public class Function : ICallable
                         TokenType.Float => interpreter.ConvertToFloat(result, null),
                         TokenType.Char => interpreter.ConvertToChar(result, null),
                         TokenType.Bool => interpreter.ConvertToBool(result, null),
-                        TokenType.Void => null,
+                        TokenType.String => interpreter.ConvertToString(result),
                         TokenType.Identifier => result, // Struct types - return as-is
                         _ => throw new Exception($"Unsupported return type: {Declaration.ReturnType.Type}")
                     };
@@ -93,7 +106,8 @@ public class Function : ICallable
                     TokenType.Float => 0.0f,
                     TokenType.Char => '\0',
                     TokenType.Bool => false,
-                    TokenType.Void => null,
+                    TokenType.String => StringInstance.Create("", interpreter.HeapManager),
+                    TokenType.Void => VoidResult.Instance,
                     _ => null
                 };
             }
@@ -104,6 +118,37 @@ public class Function : ICallable
         {
             interpreter.environment = previous;
         }
+    }
+
+    /// <summary>
+    /// Creates the appropriate parameter value based on type semantics
+    /// Structs: value semantics (copy), Classes: reference semantics (same object)
+    /// </summary>
+    private static object? CreateParameterValue(object? arg)
+    {
+        return arg switch
+        {
+            StructInstance structInstance => CreateStructCopy(structInstance),
+            ClassInstance classInstance => classInstance, // Reference semantics - pass same object
+            _ => arg // Other types (null, primitives, etc.) - pass as-is
+        };
+    }
+
+    /// <summary>
+    /// Creates a shallow copy of a struct instance for value semantics
+    /// </summary>
+    private static StructInstance CreateStructCopy(StructInstance original)
+    {
+        // Create a new struct instance with the same definition
+        StructInstance copy = new StructInstance(original.Definition);
+        
+        // Copy all field values
+        foreach (var field in original.Fields)
+        {
+            copy.Fields[field.Key] = field.Value;
+        }
+        
+        return copy;
     }
 }
 

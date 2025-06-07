@@ -129,6 +129,16 @@ public class BoundMethod : ICallable
                     // Field wasn't modified in method, keep original value
                 }
             }
+            // Handle void method returns
+            if (Method.ReturnType.Type == TokenType.Void)
+            {
+                if (returnValue.Value != null)
+                {
+                    throw new Exception($"Void method '{Method.Name.Lexeme}' cannot return a value");
+                }
+                return VoidResult.Instance;
+            }
+            
             return returnValue.Value;
         }
         finally
@@ -136,6 +146,7 @@ public class BoundMethod : ICallable
             interpreter.environment = previous;
         }
         
-        return null;
+        // If no return statement, return appropriate default
+        return Method.ReturnType.Type == TokenType.Void ? VoidResult.Instance : null;
     }
 }

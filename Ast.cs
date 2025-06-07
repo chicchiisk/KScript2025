@@ -34,6 +34,7 @@ public interface IExprVisitor<T>
     T VisitCallExpr(CallExpr expr);
     T VisitMemberAccessExpr(MemberAccessExpr expr);
     T VisitStructNewExpr(StructNewExpr expr);
+    T VisitClassNewExpr(ClassNewExpr expr);
     
     // Array operations
     T VisitArrayAccessExpr(ArrayAccessExpr expr);
@@ -303,6 +304,24 @@ public class StructNewExpr : Expr
     public override T Accept<T>(IExprVisitor<T> visitor)
     {
         return visitor.VisitStructNewExpr(this);
+    }
+}
+
+/// <summary>
+/// Represents class instantiation (new ClassName())
+/// </summary>
+public class ClassNewExpr : Expr
+{
+    public Token ClassType { get; }
+
+    public ClassNewExpr(Token classType)
+    {
+        ClassType = classType;
+    }
+
+    public override T Accept<T>(IExprVisitor<T> visitor)
+    {
+        return visitor.VisitClassNewExpr(this);
     }
 }
 

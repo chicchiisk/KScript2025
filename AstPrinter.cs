@@ -101,6 +101,11 @@ public class AstPrinter : IExprVisitor<string>
         return $"new {expr.StructType.Lexeme}()";
     }
 
+    public string VisitClassNewExpr(ClassNewExpr expr)
+    {
+        return $"new {expr.ClassType.Lexeme}()";
+    }
+
     private string Parenthesize(string name, params Expr[] exprs)
     {
         var result = $"({name}";
