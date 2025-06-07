@@ -55,4 +55,16 @@ public class Environment
         if (enclosing != null) return enclosing.IsDefined(name);
         return false;
     }
+
+    public object? GetByName(string name)
+    {
+        if (values.TryGetValue(name, out var value))
+        {
+            return value;
+        }
+
+        if (enclosing != null) return enclosing.GetByName(name);
+
+        throw new Exception($"Undefined variable '{name}'.");
+    }
 }

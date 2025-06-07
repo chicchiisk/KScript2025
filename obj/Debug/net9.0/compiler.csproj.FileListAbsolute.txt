@@ -12,3 +12,4 @@
 /home/chicchiisk/projects/compiler/obj/Debug/net9.0/compiler.pdb
 /home/chicchiisk/projects/compiler/obj/Debug/net9.0/compiler.genruntimeconfig.cache
 /home/chicchiisk/projects/compiler/obj/Debug/net9.0/ref/compiler.dll
+/home/chicchiisk/projects/compiler/obj/Debug/net9.0/compiler.sourcelink.json

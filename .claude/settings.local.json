@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(dotnet build)",
-      "Bash(dotnet run:*)"
+      "Bash(dotnet run:*)",
+      "Bash(mkdir:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(cp:*)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

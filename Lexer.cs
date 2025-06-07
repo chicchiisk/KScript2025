@@ -1,23 +1,44 @@
 namespace Calculator;
 
+/// <summary>
+/// Lexical analyzer that converts source code into a sequence of tokens
+/// </summary>
 public class Lexer
 {
     private readonly string source;
     private int current = 0;
+    
+    /// <summary>
+    /// Keywords mapping for the scripting language
+    /// </summary>
     private static readonly Dictionary<string, TokenType> keywords = new()
     {
+        // Type system
         ["int"] = TokenType.Int,
         ["float"] = TokenType.Float,
         ["char"] = TokenType.Char,
         ["bool"] = TokenType.Bool,
         ["void"] = TokenType.Void,
+        
+        // Control flow
         ["if"] = TokenType.If,
         ["else"] = TokenType.Else,
         ["for"] = TokenType.For,
+        ["return"] = TokenType.Return,
+        
+        // Literals
         ["true"] = TokenType.True,
         ["false"] = TokenType.False,
+        
+        // Object-oriented
         ["new"] = TokenType.New,
-        ["return"] = TokenType.Return
+        ["struct"] = TokenType.Struct,
+        
+        // Module system
+        ["import"] = TokenType.Import,
+        ["export"] = TokenType.Export,
+        ["as"] = TokenType.As,
+        ["from"] = TokenType.From
     };
 
     public Lexer(string source)
@@ -25,6 +46,9 @@ public class Lexer
         this.source = source;
     }
 
+    /// <summary>
+    /// Scans the entire source code and returns a list of tokens
+    /// </summary>
     public List<Token> ScanTokens()
     {
         List<Token> tokens = new();
@@ -38,16 +62,22 @@ public class Lexer
         return tokens;
     }
 
+    /// <summary>
+    /// Scans a single token from the current position
+    /// </summary>
     private void ScanToken(List<Token> tokens)
     {
         char c = Advance();
         switch (c)
         {
+            // Whitespace
             case ' ':
             case '\r':
             case '\t':
             case '\n':
                 break;
+                
+            // Arithmetic operators
             case '+':
                 AddToken(tokens, Match('+') ? TokenType.PlusPlus : TokenType.Plus);
                 break;
@@ -63,6 +93,8 @@ public class Lexer
             case '%':
                 AddToken(tokens, TokenType.Modulo);
                 break;
+                
+            // Delimiters
             case '(':
                 AddToken(tokens, TokenType.LeftParen);
                 break;
@@ -75,41 +107,6 @@ public class Lexer
             case '}':
                 AddToken(tokens, TokenType.RightBrace);
                 break;
-            case '=':
-                AddToken(tokens, Match('=') ? TokenType.EqualEqual : TokenType.Equal);
-                break;
-            case '!':
-                AddToken(tokens, Match('=') ? TokenType.BangEqual : throw new Exception($"Unexpected character '!' at position {current - 1}"));
-                break;
-            case '>':
-                AddToken(tokens, Match('=') ? TokenType.GreaterEqual : TokenType.Greater);
-                break;
-            case '<':
-                AddToken(tokens, Match('=') ? TokenType.LessEqual : TokenType.Less);
-                break;
-            case '&':
-                if (Match('&'))
-                {
-                    AddToken(tokens, TokenType.AndAnd);
-                }
-                else
-                {
-                    throw new Exception($"Unexpected character '&' at position {current - 1}");
-                }
-                break;
-            case '|':
-                if (Match('|'))
-                {
-                    AddToken(tokens, TokenType.OrOr);
-                }
-                else
-                {
-                    throw new Exception($"Unexpected character '|' at position {current - 1}");
-                }
-                break;
-            case ';':
-                AddToken(tokens, TokenType.Semicolon);
-                break;
             case '[':
                 AddToken(tokens, TokenType.LeftBracket);
                 break;
@@ -119,17 +116,58 @@ public class Lexer
             case ',':
                 AddToken(tokens, TokenType.Comma);
                 break;
-            case '\'':
-                CharLiteral(tokens);
+            case '.':
+                AddToken(tokens, TokenType.Dot);
                 break;
+            case ';':
+                AddToken(tokens, TokenType.Semicolon);
+                break;
+                
+            // Comparison and assignment operators
+            case '=':
+                AddToken(tokens, Match('=') ? TokenType.EqualEqual : TokenType.Equal);
+                break;
+            case '!':
+                if (!Match('='))
+                    throw new Exception($"Unexpected character '!' at position {current - 1}");
+                AddToken(tokens, TokenType.BangEqual);
+                break;
+            case '>':
+                AddToken(tokens, Match('=') ? TokenType.GreaterEqual : TokenType.Greater);
+                break;
+            case '<':
+                AddToken(tokens, Match('=') ? TokenType.LessEqual : TokenType.Less);
+                break;
+                
+            // Logical operators
+            case '&':
+                if (!Match('&'))
+                    throw new Exception($"Unexpected character '&' at position {current - 1}");
+                AddToken(tokens, TokenType.AndAnd);
+                break;
+            case '|':
+                if (!Match('|'))
+                    throw new Exception($"Unexpected character '|' at position {current - 1}");
+                AddToken(tokens, TokenType.OrOr);
+                break;
+                
+            // Literals
+            case '\'':
+                ScanCharLiteral(tokens);
+                break;
+            case '"':
+                ScanStringLiteral(tokens);
+                break;
+                
+            // Complex tokens
             default:
                 if (char.IsDigit(c))
                 {
-                    Number(tokens);
+                    ScanNumber(tokens);
                 }
                 else if (char.IsLetter(c) || c == '_')
                 {
-                    Identifier(tokens);
+                    ScanIdentifier(tokens);
                 }
                 else
                 {
@@ -139,7 +177,10 @@ public class Lexer
         }
     }
 
-    private void Number(List<Token> tokens)
+    /// <summary>
+    /// Scans a numeric literal (integer or float)
+    /// </summary>
+    private void ScanNumber(List<Token> tokens)
     {
         int start = current - 1;
         
@@ -150,13 +191,13 @@ public class Lexer
         if (Peek() == '.' && char.IsDigit(PeekNext()))
         {
             isFloat = true;
-            Advance();
+            Advance(); // consume '.'
             while (char.IsDigit(Peek()))
                 Advance();
         }
 
         // Check for 'f' suffix for float literals
-        if (Peek() == 'f' || Peek() == 'F')
+        if (Peek() is 'f' or 'F')
         {
             isFloat = true;
             Advance();
@@ -180,7 +221,10 @@ public class Lexer
         AddToken(tokens, TokenType.Number, value);
     }
 
-    private void Identifier(List<Token> tokens)
+    /// <summary>
+    /// Scans an identifier or keyword
+    /// </summary>
+    private void ScanIdentifier(List<Token> tokens)
     {
         int start = current - 1;
         
@@ -192,7 +236,10 @@ public class Lexer
         AddToken(tokens, type);
     }
 
-    private void CharLiteral(List<Token> tokens)
+    /// <summary>
+    /// Scans a character literal with escape sequence support
+    /// </summary>
+    private void ScanCharLiteral(List<Token> tokens)
     {
         int start = current - 1;
         
@@ -225,46 +272,106 @@ public class Lexer
         AddToken(tokens, TokenType.Number, value);
     }
 
+    /// <summary>
+    /// Scans a string literal with escape sequence support
+    /// </summary>
+    private void ScanStringLiteral(List<Token> tokens)
+    {
+        int start = current - 1;
+        string value = "";
+        
+        while (!IsAtEnd() && Peek() != '"')
+        {
+            char c = Advance();
+            if (c == '\\')
+            {
+                if (IsAtEnd())
+                    throw new Exception($"Unterminated string literal at position {start}");
+                
+                char escaped = Advance();
+                c = escaped switch
+                {
+                    'n' => '\n',
+                    't' => '\t',
+                    'r' => '\r',
+                    '\\' => '\\',
+                    '"' => '"',
+                    _ => throw new Exception($"Invalid escape sequence '\\{escaped}' at position {current - 2}")
+                };
+            }
+            value += c;
+        }
+        
+        if (IsAtEnd())
+            throw new Exception($"Unterminated string literal at position {start}");
+        
+        // Consume the closing "
+        Advance();
+        
+        AddToken(tokens, TokenType.Number, value); // Use Number token type for string literals
+    }
+
+    /// <summary>
+    /// Adds a token to the token list
+    /// </summary>
     private void AddToken(List<Token> tokens, TokenType type, object? literal = null)
     {
         int start = current - 1;
-        if (type == TokenType.Identifier || type == TokenType.Int)
+        
+        // For multi-character tokens, find the actual start
+        if (type == TokenType.Identifier || type is TokenType.Int or TokenType.Float or TokenType.Char or TokenType.Bool or TokenType.Void)
         {
             while (start > 0 && (char.IsLetterOrDigit(source[start - 1]) || source[start - 1] == '_'))
                 start--;
         }
+        
         string text = source[start..current];
         tokens.Add(new Token(type, text, literal, start));
     }
 
+    #region Helper Methods
+
+    /// <summary>
+    /// Advances to the next character and returns it
+    /// </summary>
     private char Advance()
     {
         return source[current++];
     }
 
+    /// <summary>
+    /// Returns the current character without advancing
+    /// </summary>
     private char Peek()
     {
-        if (IsAtEnd()) return '\0';
-        return source[current];
+        return IsAtEnd() ? '\0' : source[current];
     }
 
+    /// <summary>
+    /// Returns the next character without advancing
+    /// </summary>
     private char PeekNext()
     {
-        if (current + 1 >= source.Length) return '\0';
-        return source[current + 1];
+        return current + 1 >= source.Length ? '\0' : source[current + 1];
     }
 
+    /// <summary>
+    /// Matches the expected character and advances if found
+    /// </summary>
     private bool Match(char expected)
     {
-        if (IsAtEnd()) return false;
-        if (source[current] != expected) return false;
-
+        if (IsAtEnd() || source[current] != expected) return false;
         current++;
         return true;
     }
 
+    /// <summary>
+    /// Checks if we've reached the end of the source
+    /// </summary>
     private bool IsAtEnd()
     {
         return current >= source.Length;
     }
+
+    #endregion
 }

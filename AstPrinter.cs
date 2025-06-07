@@ -32,6 +32,27 @@ public class AstPrinter : IExprVisitor<string>
         return expr.Name.Lexeme;
     }
 
+    public string VisitMemberAccessExpr(MemberAccessExpr expr)
+    {
+        if (expr.ModuleName != null)
+        {
+            return $"{expr.ModuleName.Lexeme}.{expr.MemberName.Lexeme}";
+        }
+        else if (expr.Target != null)
+        {
+            return $"({expr.Target.Accept(this)}).{expr.MemberName.Lexeme}";
+        }
+        else
+        {
+            return $"invalid.{expr.MemberName.Lexeme}";
+        }
+    }
+
+    public string VisitMemberAssignExpr(MemberAssignExpr expr)
+    {
+        return $"{expr.Target.Accept(this)} = {expr.Value.Accept(this)}";
+    }
+
     public string VisitAssignExpr(AssignExpr expr)
     {
         return Parenthesize("=", new VariableExpr(expr.Name), expr.Value);
@@ -64,7 +85,20 @@ public class AstPrinter : IExprVisitor<string>
 
     public string VisitCallExpr(CallExpr expr)
     {
-        return Parenthesize($"call {expr.Name.Lexeme}", expr.Arguments.ToArray());
+        string calleeName = expr.Callee switch
+        {
+            VariableExpr varExpr => varExpr.Name.Lexeme,
+            MemberAccessExpr memberExpr => memberExpr.ModuleName?.Lexeme != null 
+                ? $"{memberExpr.ModuleName.Lexeme}.{memberExpr.MemberName.Lexeme}"
+                : $"({memberExpr.Target?.Accept(this)}).{memberExpr.MemberName.Lexeme}",
+            _ => "call"
+        };
+        return Parenthesize($"call {calleeName}", expr.Arguments.ToArray());
+    }
+
+    public string VisitStructNewExpr(StructNewExpr expr)
+    {
+        return $"new {expr.StructType.Lexeme}()";
     }
 
     private string Parenthesize(string name, params Expr[] exprs)

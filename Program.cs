@@ -23,7 +23,8 @@ if (!File.Exists(filePath))
 try
 {
     string source = File.ReadAllText(filePath);
-    RunFile(source);
+    string directory = Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? "";
+    RunFile(source, directory);
 }
 catch (IOException ex)
 {
@@ -36,7 +37,7 @@ catch (Exception ex)
     System.Environment.Exit(1);
 }
 
-static void RunFile(string source)
+static void RunFile(string source, string directory)
 {
     var lexer = new Lexer(source);
     var tokens = lexer.ScanTokens();
@@ -45,5 +46,6 @@ static void RunFile(string source)
     var statements = parser.Parse();
     
     var interpreter = new Interpreter();
+    interpreter.SetCurrentDirectory(directory);
     interpreter.Interpret(statements);
 }
